@@ -2,119 +2,95 @@ import numpy as np
 from collections import Counter
 from math import log2
 
+def _convert_numparray(arr):
+    if isinstance(arr, np.ndarray):
+        return arr
+    else:
+        return np.array(arr)
+
 class BaseCriterion():
 
-    def __init__(self, left_node_index, right_node_index, y):
-        self.left_node_index = left_node_index
-        self.right_node_index = right_node_index
+    def __init__(self, y, y_idx):
         self.y = y
-        self.classes = np.unique(y)
-        self.n = len(self.y)
+        self.y_idx = y_idx
 
-class ClassificationCriterion(BaseCriterion):
+class gini(BaseCriterion):
+    """
+    Evaluate the impurity of the current node, i.e.,
+    the impurity of samples[:] using the Gini criterion
+    """
 
     def __init__(self,
-                 left_node_index,
-                 right_node_index,
-                 y
+                 y,
+                 y_idx
                  ):
         super().__init__(
-            left_node_index = left_node_index,
-            right_node_index = right_node_index,
-            y = y
+            y = y,
+            y_idx = y_idx
         )
 
-    def gini(self):
-        """
-        Evaluate the impurity of the current node, i.e.,
-        the impurity of samples[:] using the Gini criterion
-        """
+        unique_label, unique_label_count = np.unique(self.y[self.y_idx], return_counts=True)
+        impurity = 1.0
+        for i in range(len(unique_label)):
+            p_i = unique_label_count[i] / sum(unique_label_count)
+            impurity -= p_i ** 2
+        self.impurity = impurity
 
-        left_node_y = self.y[self.left_node_index]
-        right_node_y = self.y[self.right_node_index]
+class entropy(BaseCriterion):
 
-        left_counter = Counter(left_node_y)
-        right_counter = Counter(right_node_y)
+    """
+    Evaluate the impurity of the current node, i.e.,
+    the impurity of samples[:] using the entropy criterion
+    """
 
-        left_gini = 0
-        right_gini = 0
+    def __init__(self,
+                 y,
+                 y_idx
+                 ):
+        super().__init__(
+            y=y,
+            y_idx=y_idx
+        )
 
-        for c in self.classes:
-            left_counter[c] /= self.n
-            right_counter[c] /= self.n
+        unique_label, unique_label_count = np.unique(self.y[self.y_idx], return_counts=True)
+        impurity = 1.0
+        for i in range(len(unique_label)):
+            p_i = unique_label_count[i] / sum(unique_label_count)
+            impurity -= p_i * log2(p_i)
+        self.impurity = impurity
 
-            left_gini += left_counter[c]**2
-            right_gini += right_counter[c]**2
+class mse(BaseCriterion):
+    """
+    Evaluate the impurity of the current node, i.e.,
+    the impurity of samples[:] using the mse criterion
+    """
 
-        left_impurity = 1 - left_gini
-        right_impurity = 1 - right_gini
+    def __init__(self,
+                 y,
+                 y_idx
+                 ):
+        super().__init__(
+            y=y,
+            y_idx=y_idx
+        )
 
-        return (len(left_node_y) * left_impurity + len(right_node_y) * right_impurity) / (len(left_node_y) + len(right_node_y))
+        ybar = np.mean(self.y[self.y_idx])
+        self.impurity = np.power(self.y - ybar, 2).mean()
 
-    def entropy(self):
+class mae(BaseCriterion):
+    """
+    Evaluate the impurity of the current node, i.e.,
+    the impurity of samples[:] using the mae criterion
+    """
 
-        """
-        Evaluate the impurity of the current node, i.e.,
-        the impurity of samples[:] using the entropy criterion
-        """
+    def __init__(self,
+                 y,
+                 y_idx
+                 ):
+        super().__init__(
+            y=y,
+            y_idx=y_idx
+        )
 
-        left_node_y = self.y[self.left_node_index]
-        right_node_y = self.y[self.right_node_index]
-
-        left_counter = Counter(left_node_y)
-        right_counter = Counter(right_node_y)
-
-        left_ent = 0
-        right_ent = 0
-
-        for c in self.classes:
-            left_counter[c] /= self.n
-            right_counter[c] /= self.n
-
-            left_ent += -left_counter[c] * log2(left_counter[c])
-            right_ent += -right_counter[c] * log2(right_counter[c])
-
-        left_impurity = 1-left_ent
-        right_impurity = 1-right_ent
-
-        return (len(left_node_y) * left_impurity + len(right_node_y) * right_impurity) / (
-                    len(left_node_y) + len(right_node_y))
-
-class RegressionCriterion(BaseCriterion):
-
-    def mse(self):
-
-        """
-        Evaluate the impurity of the current node, i.e.,
-        the impurity of samples[:] using the mse criterion
-        """
-
-        left_node_y = self.y[self.left_node_index]
-        right_node_y = self.y[self.right_node_index]
-
-        left_node_avg = np.mean(left_node_y)
-        right_node_avg = np.mean(right_node_y)
-
-        left_impurity = np.power(left_node_y - left_node_avg, 2).sum().mean()
-        right_impurity = np.power(right_node_y - right_node_avg, 2).sum().mean()
-
-        return (len(left_node_y) * left_impurity + len(right_node_y) * right_impurity) / (
-                len(left_node_y) + len(right_node_y))
-
-    def mae(self):
-        """
-        Evaluate the impurity of the current node, i.e.,
-        the impurity of samples[:] using the mae criterion
-        """
-
-        left_node_y = self.y[self.left_node_index]
-        right_node_y = self.y[self.right_node_index]
-
-        left_node_med = np.median(left_node_y)
-        right_node_med = np.median(right_node_y)
-
-        left_impurity = np.abs(left_node_y - left_node_med).sum().mean()
-        right_impurity = np.abs(right_node_y - right_node_med).sum().mean()
-
-        return (len(left_node_y) * left_impurity + len(right_node_y) * right_impurity) / (
-                len(left_node_y) + len(right_node_y))
+        ymed = np.median(self.y[self.y_idx])
+        self.impurity = np.abs(self.y - ymed).mean()
